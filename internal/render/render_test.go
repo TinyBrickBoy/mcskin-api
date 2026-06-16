@@ -63,6 +63,30 @@ func TestBodyDimensions(t *testing.T) {
 	}
 }
 
+func TestPfpDimensions(t *testing.T) {
+	out, err := Pfp(sampleSkin(), 120)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := decode(t, out).Bounds()
+	if b.Dx() != 120 || b.Dy() != 120 { // 20x20 tile at scale 6
+		t.Fatalf("got %v, want 120x120", b)
+	}
+}
+
+func TestPfpLegacySkin(t *testing.T) {
+	// A 64x32 (legacy) skin must render without panicking or erroring.
+	legacy := image.NewNRGBA(image.Rect(0, 0, 64, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 64; x++ {
+			legacy.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 4), G: uint8(y * 8), B: 64, A: 255})
+		}
+	}
+	if _, err := Pfp(legacy, 40); err != nil {
+		t.Fatalf("legacy pfp: %v", err)
+	}
+}
+
 func TestSizeFloorIsOne(t *testing.T) {
 	out, err := Face(sampleSkin(), 0)
 	if err != nil {

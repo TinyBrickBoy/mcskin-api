@@ -42,6 +42,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /head/{player}", s.handleImage(render.Head))
 	mux.HandleFunc("GET /avatar/{player}", s.handleImage(render.Head))
 	mux.HandleFunc("GET /body/{player}", s.handleImage(render.Body))
+	mux.HandleFunc("GET /pfp/{player}", s.handleImage(render.Pfp))
 	mux.HandleFunc("GET /", s.handleIndex)
 	return s.recover(s.logRequests(mux))
 }
@@ -97,6 +98,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			"GET /head/{player}?size=N",
 			"GET /avatar/{player}?size=N",
 			"GET /body/{player}?size=N",
+			"GET /pfp/{player}?size=N",
 			"GET /health",
 		},
 		"notes": "player = username or UUID; size 1-512 (default 128)",
