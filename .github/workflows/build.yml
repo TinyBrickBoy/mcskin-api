@@ -1,0 +1,97 @@
+name: build
+
+# Builds installable binaries on every push and makes them available two ways:
+#   1. As downloadable workflow artifacts (Actions run → "Artifacts").
+#   2. Committed to the long-lived `builds` branch under <source-branch>/, so they
+#      can be fetched with a plain `git pull` / `git clone --branch builds`.
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build binaries
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          version="${GITHUB_SHA::7}"
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            os="${target%/*}"; arch="${target#*/}"
+            out="dist/mcskins-${os}-${arch}"
+            [ "$os" = "windows" ] && out="${out}.exe"
+            echo "building $out"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath -ldflags "-s -w" -o "$out" ./cmd/mcskins
+          done
+          ( cd dist && sha256sum * > SHA256SUMS.txt )
+          ls -la dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcskins-binaries-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Publish to builds branch
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF_NAME//\//-}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Check out (or create) the orphan `builds` branch in a separate worktree.
+          if git ls-remote --exit-code --heads origin builds >/dev/null 2>&1; then
+            git fetch origin builds
+            git worktree add /tmp/builds builds
+          else
+            git worktree add --orphan -b builds /tmp/builds
+          fi
+
+          # Replace only this source branch's folder; leave other branches' builds.
+          rm -rf "/tmp/builds/${branch}"
+          mkdir -p "/tmp/builds/${branch}"
+          cp dist/* "/tmp/builds/${branch}/"
+
+          cat > "/tmp/builds/README.md" <<EOF
+          # Build-Artefakte
+
+          Fertige \`mcskins\`-Binaries, automatisch pro Branch gebaut.
+
+          Hol dir deine Binary z.B. so:
+
+          \`\`\`bash
+          git clone --branch builds --single-branch <repo-url> mcskins-builds
+          # oder im bestehenden Klon:
+          git fetch origin builds && git checkout builds && git pull
+          \`\`\`
+
+          Verzeichnis = Quell-Branch, Datei = mcskins-<os>-<arch>. Checksummen in SHA256SUMS.txt.
+          EOF
+
+          cd /tmp/builds
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no changes to publish"
+          else
+            git commit -m "build: ${branch} @ ${GITHUB_SHA::7}"
+            for i in 1 2 3 4; do
+              git push origin builds && break || { echo "push failed, retry $i"; sleep $((2**i)); }
+            done
+          fi

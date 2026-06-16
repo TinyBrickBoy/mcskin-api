@@ -28,9 +28,14 @@ type Server struct {
 	log *slog.Logger
 }
 
-// New builds a Server with a Mojang client using the given cache TTL.
-func New(ttl time.Duration, log *slog.Logger) *Server {
-	return &Server{mc: mojang.New(ttl), log: log}
+// Config configures a Server.
+type Config struct {
+	Proxies []string // proxy URLs for 429 fallback (socks5/http)
+}
+
+// New builds a Server with a Mojang client from cfg.
+func New(cfg Config, log *slog.Logger) *Server {
+	return &Server{mc: mojang.New(cfg.Proxies), log: log}
 }
 
 // Routes returns the configured http.Handler.
@@ -124,6 +129,8 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, mojang.ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "player not found"})
+	case errors.Is(err, mojang.ErrRateLimited):
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limited; no peer available"})
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "upstream timeout"})
 	default:
@@ -134,7 +141,7 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 
 func writePNG(w http.ResponseWriter, data []byte) {
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
 }
 
