@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 )
 
 // rtFunc adapts a function to an http.RoundTripper.
@@ -26,7 +25,7 @@ func egressClient(status int, body string) *http.Client {
 }
 
 func TestNewCountsProxies(t *testing.T) {
-	c := New(time.Minute, []string{"socks5://10.0.0.2:1080", "  ", "http://h:3128", "://bad"})
+	c := New([]string{"socks5://10.0.0.2:1080", "  ", "http://h:3128", "://bad"})
 	// direct + the two parseable proxies (blank and "://bad" are skipped)
 	if got := len(c.egress); got != 3 {
 		t.Fatalf("egress count = %d, want 3", got)
@@ -34,7 +33,7 @@ func TestNewCountsProxies(t *testing.T) {
 }
 
 func TestGetUsesDirectFirst(t *testing.T) {
-	c := New(time.Minute, nil)
+	c := New(nil)
 	c.egress = []*http.Client{egressClient(http.StatusOK, "direct"), egressClient(http.StatusOK, "proxy")}
 	body, status, err := c.get(context.Background(), "http://x")
 	if err != nil || status != http.StatusOK || string(body) != "direct" {
@@ -43,7 +42,7 @@ func TestGetUsesDirectFirst(t *testing.T) {
 }
 
 func TestGetRotatesPastRateLimit(t *testing.T) {
-	c := New(time.Minute, nil)
+	c := New(nil)
 	c.egress = []*http.Client{
 		egressClient(http.StatusTooManyRequests, ""), // direct is rate-limited
 		egressClient(http.StatusTooManyRequests, ""), // proxy 1 too
@@ -56,7 +55,7 @@ func TestGetRotatesPastRateLimit(t *testing.T) {
 }
 
 func TestGetAllRateLimitedReturns429(t *testing.T) {
-	c := New(time.Minute, nil)
+	c := New(nil)
 	c.egress = []*http.Client{
 		egressClient(http.StatusTooManyRequests, ""),
 		egressClient(http.StatusTooManyRequests, ""),
@@ -71,7 +70,7 @@ func TestGetSkipsUnreachableEgress(t *testing.T) {
 	boom := &http.Client{Transport: rtFunc(func(r *http.Request) (*http.Response, error) {
 		return nil, io.ErrUnexpectedEOF // proxy down
 	})}
-	c := New(time.Minute, nil)
+	c := New(nil)
 	c.egress = []*http.Client{boom, egressClient(http.StatusOK, "recovered")}
 	body, status, err := c.get(context.Background(), "http://x")
 	if err != nil || status != http.StatusOK || string(body) != "recovered" {

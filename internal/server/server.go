@@ -30,13 +30,12 @@ type Server struct {
 
 // Config configures a Server.
 type Config struct {
-	TTL     time.Duration // cache lifetime for profiles and skins
-	Proxies []string      // proxy URLs for 429 fallback (socks5/http)
+	Proxies []string // proxy URLs for 429 fallback (socks5/http)
 }
 
 // New builds a Server with a Mojang client from cfg.
 func New(cfg Config, log *slog.Logger) *Server {
-	return &Server{mc: mojang.New(cfg.TTL, cfg.Proxies), log: log}
+	return &Server{mc: mojang.New(cfg.Proxies), log: log}
 }
 
 // Routes returns the configured http.Handler.

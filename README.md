@@ -2,7 +2,7 @@
 
 Eine schnelle, schlanke Minecraft-Skin-API in Go — **keine externen Dependencies**, nur die Standard-Library.
 
-Sie löst Minecraft-Benutzernamen oder UUIDs über die offiziellen Mojang-APIs auf, holt die Skin-Textur und rendert daraus Avatare (Gesicht, Kopf mit Hut-Layer, Ganzkörper). Antworten werden zwischengespeichert (TTL-Cache), damit wiederholte Anfragen sofort beantwortet werden und Mojang geschont wird.
+Sie löst Minecraft-Benutzernamen oder UUIDs über die offiziellen Mojang-APIs auf, holt die Skin-Textur und rendert daraus Avatare (Gesicht, Kopf mit Hut-Layer, Ganzkörper). Es wird **nichts zwischengespeichert** — jede Anfrage fragt Mojang frisch ab.
 
 ## Endpoints
 
@@ -44,7 +44,6 @@ go build -o mcskins ./cmd/mcskins && ./mcskins
 | Variable                     | Standard | Bedeutung                                         |
 | ---------------------------- | -------- | ------------------------------------------------- |
 | `MCSKINS_ADDR`               | `:8080`  | Listen-Adresse                                    |
-| `MCSKINS_CACHE_TTL_SECONDS`  | `1800`   | Cache-Lebensdauer in Sekunden                     |
 | `MCSKINS_PROXIES`            | _(leer)_ | Komma-Liste von Proxy-URLs für Rate-Limit-Fallback |
 
 ## Proxy-Netzwerk (Rate-Limit-Fallback)
@@ -104,7 +103,6 @@ go test ./...
 ```
 cmd/mcskins        Einstiegspunkt, Server-Lifecycle, Graceful Shutdown
 internal/server    HTTP-Routing, Handler, Fehler-Mapping, Logging
-internal/mojang    Mojang-Client: Name→UUID→Textur, Caching, Fallback-Skin
+internal/mojang    Mojang-Client: Name→UUID→Textur, Proxy-Fallback, Fallback-Skin
 internal/render    Ausschneiden & Skalieren von Skin-Regionen zu PNGs
-internal/cache     Generischer, thread-sicherer TTL-Cache
 ```

@@ -1,6 +1,6 @@
 // Package mojang resolves Minecraft usernames/UUIDs to player skins via the
-// official Mojang APIs, with in-memory caching and a sane default skin
-// fallback.
+// official Mojang APIs, with a sane default skin fallback. Every request hits
+// Mojang fresh — nothing is cached.
 package mojang
 
 import (
@@ -14,8 +14,6 @@ import (
 	nurl "net/url"
 	"strings"
 	"time"
-
-	"github.com/tinybrickboy/mcskins/internal/cache"
 )
 
 // ErrNotFound is returned when a username or UUID does not resolve to a player.
@@ -37,17 +35,14 @@ type Skin struct {
 
 // Client talks to the Mojang APIs. The zero value is not usable; use New.
 type Client struct {
-	egress   []*http.Client              // ordered: [0] is direct, rest via proxies
-	profiles *cache.TTL[string, profile] // key: lowercased name or uuid
-	skins    *cache.TTL[string, *Skin]   // key: texture url
+	egress []*http.Client // ordered: [0] is direct, rest via proxies
 }
 
 type profile struct {
-	ID   string
-	Name string
+	ID string
 }
 
-// New returns a Client with the given cache TTL for profiles and skins.
+// New returns a Client. Nothing is cached: every call resolves against Mojang.
 //
 // proxies is an ordered list of proxy URLs (e.g. "socks5://10.0.0.2:1080" or
 // "http://user:pass@host:3128"). They form the node's own proxy network: every
@@ -55,7 +50,7 @@ type profile struct {
 // same request is retried through each proxy in turn. Each proxy egresses from a
 // different IP, so it carries its own rate-limit budget. Unparseable entries are
 // skipped. Any scheme supported by net/http (http, https, socks5) works.
-func New(ttl time.Duration, proxies []string) *Client {
+func New(proxies []string) *Client {
 	egress := []*http.Client{{Timeout: 8 * time.Second}} // [0] = direct
 	for _, p := range proxies {
 		u, err := nurl.Parse(strings.TrimSpace(p))
@@ -67,11 +62,7 @@ func New(ttl time.Duration, proxies []string) *Client {
 			Transport: &http.Transport{Proxy: http.ProxyURL(u)},
 		})
 	}
-	return &Client{
-		egress:   egress,
-		profiles: cache.New[string, profile](ttl),
-		skins:    cache.New[string, *Skin](ttl),
-	}
+	return &Client{egress: egress}
 }
 
 // Skin resolves player (username or UUID, with or without dashes) and returns
@@ -90,16 +81,11 @@ func (c *Client) Skin(ctx context.Context, player string) (*Skin, error) {
 	if texURL == "" {
 		return defaultSkin(id), nil
 	}
-	if s, ok := c.skins.Get(texURL); ok {
-		return s, nil
-	}
 	png, err := c.fetch(ctx, texURL)
 	if err != nil {
 		return nil, err
 	}
-	s := &Skin{PNG: png, Slim: slim, Model: model(slim)}
-	c.skins.Set(texURL, s)
-	return s, nil
+	return &Skin{PNG: png, Slim: slim, Model: model(slim)}, nil
 }
 
 // resolveUUID turns a username into a dash-less UUID, or normalizes a UUID.
@@ -108,9 +94,6 @@ func (c *Client) resolveUUID(ctx context.Context, player string) (string, error)
 	clean := strings.ReplaceAll(p, "-", "")
 	if isUUID(clean) {
 		return clean, nil
-	}
-	if pr, ok := c.profiles.Get(p); ok {
-		return pr.ID, nil
 	}
 	u := "https://api.mojang.com/users/profiles/minecraft/" + url(player)
 	body, status, err := c.get(ctx, u)
@@ -133,7 +116,6 @@ func (c *Client) resolveUUID(ctx context.Context, player string) (string, error)
 	if pr.ID == "" {
 		return "", ErrNotFound
 	}
-	c.profiles.Set(p, pr)
 	return pr.ID, nil
 }
 
