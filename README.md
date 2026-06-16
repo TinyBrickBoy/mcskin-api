@@ -48,8 +48,11 @@ go build -o mcskins ./cmd/mcskins && ./mcskins
 
 ```bash
 docker build -t mcskins .
-docker run -p 8080:8080 mcskins
+docker run -p 3000:3000 mcskins
 ```
+
+Das Image lauscht auf **Port 3000** (`MCSKINS_ADDR=:3000`). Für einen anderen Port
+einfach überschreiben: `docker run -p 8080:8080 -e MCSKINS_ADDR=:8080 mcskins`.
 
 ## Tests
 

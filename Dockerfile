@@ -7,6 +7,7 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /mcskins ./cmd/mcskins
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /mcskins /mcskins
-EXPOSE 8080
+ENV MCSKINS_ADDR=:3000
+EXPOSE 3000
 USER nonroot:nonroot
 ENTRYPOINT ["/mcskins"]
