@@ -13,6 +13,7 @@ Sie löst Minecraft-Benutzernamen oder UUIDs über die offiziellen Mojang-APIs a
 | `GET /head/{player}`        | Gesicht inkl. Hut-/Overlay-Layer                    |
 | `GET /avatar/{player}`      | Alias für `/head`                                   |
 | `GET /body/{player}`        | Flacher Ganzkörper-Render von vorne                 |
+| `GET /pfp/{player}`         | Stilisierter 20×20 Büsten-Avatar (Kopf + Schultern) |
 | `GET /health`               | Healthcheck (`{"status":"ok"}`)                     |
 | `GET /`                     | API-Übersicht als JSON                              |
 
@@ -26,6 +27,7 @@ Sie löst Minecraft-Benutzernamen oder UUIDs über die offiziellen Mojang-APIs a
 curl localhost:8080/face/Notch?size=256 -o notch.png
 curl localhost:8080/head/jeb_         -o jeb.png
 curl localhost:8080/body/Notch        -o notch_body.png
+curl localhost:8080/pfp/Notch?size=200 -o notch_pfp.png
 curl localhost:8080/skin/069a79f4-44e9-4726-a5be-fca90e38aaf5 -o skin.png
 ```
 
