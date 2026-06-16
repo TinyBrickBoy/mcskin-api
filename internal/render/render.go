@@ -82,8 +82,8 @@ func Pfp(skin image.Image, size int) ([]byte, error) {
 	legacy := skin.Bounds().Dy() <= 32
 
 	// Bottom (base) layer.
-	blit(8, 9, 7, 7, 8, 4)    // head
-	blit(5, 9, 3, 7, 5, 4)    // head side
+	blit(8, 9, 7, 7, 8, 4) // head
+	blit(5, 9, 3, 7, 5, 4) // head side
 	if legacy {
 		blit(44, 20, 3, 7, 12, 13) // right arm side (legacy texture position)
 	} else {
@@ -103,38 +103,28 @@ func Pfp(skin image.Image, size int) ([]byte, error) {
 		blit(21, 36, 6, 1, 7, 11)  // chest neck line overlay
 	}
 
-	// Shading overlay, masked to the rendered bust so the background stays
-	// fully transparent instead of tinted by the translucent overlay.
-	mask := image.NewAlpha(canvas.Bounds())
+	// Shading: darken opaque pixels toward the bottom-right corner for a touch
+	// of depth, leaving the transparent background untouched. Equivalent to
+	// compositing a translucent black gradient, but in a single in-place pass.
 	for y := 0; y < dim; y++ {
 		for x := 0; x < dim; x++ {
-			mask.SetAlpha(x, y, color.Alpha{A: canvas.NRGBAAt(x, y).A})
+			i := canvas.PixOffset(x, y)
+			if canvas.Pix[i+3] == 0 {
+				continue
+			}
+			f := float64(x+y) * 60 / float64(2*(dim-1)) / 255 // 0..~0.24
+			k := 1 - f
+			canvas.Pix[i+0] = uint8(float64(canvas.Pix[i+0]) * k)
+			canvas.Pix[i+1] = uint8(float64(canvas.Pix[i+1]) * k)
+			canvas.Pix[i+2] = uint8(float64(canvas.Pix[i+2]) * k)
 		}
 	}
-	draw.DrawMask(canvas, canvas.Bounds(), pfpShading(dim), image.Point{}, mask, image.Point{}, draw.Over)
 
 	scale := size / dim
 	if scale < 1 {
 		scale = 1
 	}
 	return encode(scaleNearest(canvas, dim*scale, dim*scale))
-}
-
-// pfpShading builds a subtle translucent overlay that darkens toward the
-// bottom-right corner for a touch of depth.
-func pfpShading(n int) image.Image {
-	img := image.NewNRGBA(image.Rect(0, 0, n, n))
-	for y := 0; y < n; y++ {
-		for x := 0; x < n; x++ {
-			t := float64(x+y) / float64(2*(n-1))
-			img.SetNRGBA(x, y, color.NRGBA{A: uint8(t * 60)})
-		}
-	}
-	return img
-}
-
-func (r region) rect() image.Rectangle {
-	return image.Rect(r.x, r.y, r.x+r.w, r.y+r.h)
 }
 
 // crop returns the region of skin, tolerating textures smaller than expected.
@@ -160,12 +150,32 @@ func scaleNearest(src image.Image, w, h int) image.Image {
 		h = 1
 	}
 	b := src.Bounds()
+	sw, sh := b.Dx(), b.Dy()
 	out := image.NewNRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		sy := b.Min.Y + y*b.Dy()/h
+
+	// Fast path: copy 4-byte pixels straight out of the source's Pix buffer,
+	// skipping per-pixel interface dispatch and colour conversion. All callers
+	// pass *image.NRGBA, so this is the hot path for every endpoint.
+	if nr, ok := src.(*image.NRGBA); ok {
+		xoff := make([]int, w) // source byte offset within a row per column
 		for x := 0; x < w; x++ {
-			sx := b.Min.X + x*b.Dx()/w
-			out.Set(x, y, src.At(sx, sy))
+			xoff[x] = (x * sw / w) * 4
+		}
+		for y := 0; y < h; y++ {
+			srow := nr.Pix[nr.PixOffset(b.Min.X, b.Min.Y+y*sh/h):]
+			drow := out.Pix[y*out.Stride:]
+			for x, di := 0, 0; x < w; x, di = x+1, di+4 {
+				copy(drow[di:di+4], srow[xoff[x]:xoff[x]+4])
+			}
+		}
+		return out
+	}
+
+	// Generic fallback for any other image type.
+	for y := 0; y < h; y++ {
+		sy := b.Min.Y + y*sh/h
+		for x := 0; x < w; x++ {
+			out.Set(x, y, src.At(b.Min.X+x*sw/w, sy))
 		}
 	}
 	return out
