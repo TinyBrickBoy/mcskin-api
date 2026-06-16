@@ -41,10 +41,47 @@ go build -o mcskins ./cmd/mcskins && ./mcskins
 
 ### Konfiguration (Umgebungsvariablen)
 
-| Variable                     | Standard | Bedeutung                          |
-| ---------------------------- | -------- | ---------------------------------- |
-| `MCSKINS_ADDR`               | `:8080`  | Listen-Adresse                     |
-| `MCSKINS_CACHE_TTL_SECONDS`  | `1800`   | Cache-Lebensdauer in Sekunden      |
+| Variable                     | Standard | Bedeutung                                         |
+| ---------------------------- | -------- | ------------------------------------------------- |
+| `MCSKINS_ADDR`               | `:8080`  | Listen-Adresse                                    |
+| `MCSKINS_CACHE_TTL_SECONDS`  | `1800`   | Cache-Lebensdauer in Sekunden                     |
+| `MCSKINS_PROXIES`            | _(leer)_ | Komma-Liste von Proxy-URLs für Rate-Limit-Fallback |
+
+## Proxy-Netzwerk (Rate-Limit-Fallback)
+
+Mojang limitiert pro IP. Damit der Dienst trotzdem durchhält, kann jeder Knoten
+ein **eigenes Proxy-Netzwerk** nutzen: Jede Anfrage geht zuerst **direkt** raus;
+antwortet Mojang mit `HTTP 429`, wird **dieselbe** Anfrage über die konfigurierten
+Proxys erneut versucht — der Reihe nach, bis einer Budget hat. Jeder Proxy hat eine
+eigene IP, also ein eigenes Rate-Limit-Budget. Sind alle erschöpft, gibt die API
+`429` zurück.
+
+```bash
+# erst direkt, dann über zwei SOCKS5-Proxys, dann über einen HTTP-Proxy
+export MCSKINS_PROXIES="socks5://10.0.0.2:1080,socks5://user:pass@10.0.0.3:1080,http://10.0.0.4:3128"
+go run ./cmd/mcskins
+```
+
+Unterstützt werden alle Schemata von Go's `net/http`: `socks5`, `http`, `https`.
+Nicht parsebare Einträge werden ignoriert. **Keine externen Dependencies** nötig.
+
+## Fertige Binaries (CI-Builds)
+
+Jeder Push baut per GitHub Actions installierbare Binaries für Linux, macOS und
+Windows (amd64/arm64). Du kommst auf zwei Wegen dran:
+
+1. **Direkt herunterladen:** Im jeweiligen Actions-Run unter _Artifacts_
+   (`mcskins-binaries-*`).
+2. **Per Git ziehen:** Alle Builds liegen im Branch `builds`, sortiert nach
+   Quell-Branch:
+
+   ```bash
+   git clone --branch builds --single-branch <repo-url> mcskins-builds
+   # Binary liegt unter <quell-branch>/mcskins-<os>-<arch>
+   chmod +x mcskins-builds/<quell-branch>/mcskins-linux-amd64
+   ```
+
+   Checksummen stehen in `SHA256SUMS.txt`.
 
 ## Docker
 
