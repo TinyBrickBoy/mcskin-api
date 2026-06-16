@@ -68,9 +68,14 @@ func TestPfpDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := decode(t, out).Bounds()
+	img := decode(t, out)
+	b := img.Bounds()
 	if b.Dx() != 120 || b.Dy() != 120 { // 20x20 tile at scale 6
 		t.Fatalf("got %v, want 120x120", b)
+	}
+	// Background must be fully transparent (top-left corner is outside the bust).
+	if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
+		t.Fatalf("background not transparent: alpha=%d", a)
 	}
 }
 
