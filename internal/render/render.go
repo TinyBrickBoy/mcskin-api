@@ -65,15 +65,12 @@ func Body(skin image.Image, size int) ([]byte, error) {
 }
 
 // Pfp renders a stylized 20x20 portrait bust (head + shoulders) composed from
-// several skin regions, over a generated backdrop and under a light shading
+// several skin regions on a transparent background, with a light shading
 // overlay, then scaled to size×size with nearest-neighbor. It supports both
 // modern 64x64 and legacy 64x32 skins (the latter lack 2nd-layer arm/torso).
 func Pfp(skin image.Image, size int) ([]byte, error) {
 	const dim = 20
 	canvas := image.NewNRGBA(image.Rect(0, 0, dim, dim))
-
-	// Backdrop fills the whole tile.
-	draw.Draw(canvas, canvas.Bounds(), pfpBackdrop(dim), image.Point{}, draw.Src)
 
 	// blit copies a w×h region of the skin at (sx,sy) onto the canvas at
 	// (dx,dy), compositing with alpha-over.
@@ -85,8 +82,8 @@ func Pfp(skin image.Image, size int) ([]byte, error) {
 	legacy := skin.Bounds().Dy() <= 32
 
 	// Bottom (base) layer.
-	blit(8, 9, 7, 7, 8, 4)    // head
-	blit(5, 9, 3, 7, 5, 4)    // head side
+	blit(8, 9, 7, 7, 8, 4) // head
+	blit(5, 9, 3, 7, 5, 4) // head side
 	if legacy {
 		blit(44, 20, 3, 7, 12, 13) // right arm side (legacy texture position)
 	} else {
@@ -106,50 +103,28 @@ func Pfp(skin image.Image, size int) ([]byte, error) {
 		blit(21, 36, 6, 1, 7, 11)  // chest neck line overlay
 	}
 
-	// Shading overlay on top.
-	draw.Draw(canvas, canvas.Bounds(), pfpShading(dim), image.Point{}, draw.Over)
+	// Shading: darken opaque pixels toward the bottom-right corner for a touch
+	// of depth, leaving the transparent background untouched. Equivalent to
+	// compositing a translucent black gradient, but in a single in-place pass.
+	for y := 0; y < dim; y++ {
+		for x := 0; x < dim; x++ {
+			i := canvas.PixOffset(x, y)
+			if canvas.Pix[i+3] == 0 {
+				continue
+			}
+			f := float64(x+y) * 60 / float64(2*(dim-1)) / 255 // 0..~0.24
+			k := 1 - f
+			canvas.Pix[i+0] = uint8(float64(canvas.Pix[i+0]) * k)
+			canvas.Pix[i+1] = uint8(float64(canvas.Pix[i+1]) * k)
+			canvas.Pix[i+2] = uint8(float64(canvas.Pix[i+2]) * k)
+		}
+	}
 
 	scale := size / dim
 	if scale < 1 {
 		scale = 1
 	}
 	return encode(scaleNearest(canvas, dim*scale, dim*scale))
-}
-
-// pfpBackdrop builds an n×n vertical gradient used behind the portrait.
-func pfpBackdrop(n int) image.Image {
-	top := color.NRGBA{R: 0x2b, G: 0x2f, B: 0x4a, A: 0xff}
-	bot := color.NRGBA{R: 0x4a, G: 0x52, B: 0x80, A: 0xff}
-	img := image.NewNRGBA(image.Rect(0, 0, n, n))
-	for y := 0; y < n; y++ {
-		t := float64(y) / float64(n-1)
-		row := color.NRGBA{R: lerp(top.R, bot.R, t), G: lerp(top.G, bot.G, t), B: lerp(top.B, bot.B, t), A: 0xff}
-		for x := 0; x < n; x++ {
-			img.SetNRGBA(x, y, row)
-		}
-	}
-	return img
-}
-
-// pfpShading builds a subtle translucent overlay that darkens toward the
-// bottom-right corner for a touch of depth.
-func pfpShading(n int) image.Image {
-	img := image.NewNRGBA(image.Rect(0, 0, n, n))
-	for y := 0; y < n; y++ {
-		for x := 0; x < n; x++ {
-			t := float64(x+y) / float64(2*(n-1))
-			img.SetNRGBA(x, y, color.NRGBA{A: uint8(t * 60)})
-		}
-	}
-	return img
-}
-
-func lerp(a, b uint8, t float64) uint8 {
-	return uint8(float64(a) + (float64(b)-float64(a))*t)
-}
-
-func (r region) rect() image.Rectangle {
-	return image.Rect(r.x, r.y, r.x+r.w, r.y+r.h)
 }
 
 // crop returns the region of skin, tolerating textures smaller than expected.
@@ -175,12 +150,32 @@ func scaleNearest(src image.Image, w, h int) image.Image {
 		h = 1
 	}
 	b := src.Bounds()
+	sw, sh := b.Dx(), b.Dy()
 	out := image.NewNRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		sy := b.Min.Y + y*b.Dy()/h
+
+	// Fast path: copy 4-byte pixels straight out of the source's Pix buffer,
+	// skipping per-pixel interface dispatch and colour conversion. All callers
+	// pass *image.NRGBA, so this is the hot path for every endpoint.
+	if nr, ok := src.(*image.NRGBA); ok {
+		xoff := make([]int, w) // source byte offset within a row per column
 		for x := 0; x < w; x++ {
-			sx := b.Min.X + x*b.Dx()/w
-			out.Set(x, y, src.At(sx, sy))
+			xoff[x] = (x * sw / w) * 4
+		}
+		for y := 0; y < h; y++ {
+			srow := nr.Pix[nr.PixOffset(b.Min.X, b.Min.Y+y*sh/h):]
+			drow := out.Pix[y*out.Stride:]
+			for x, di := 0, 0; x < w; x, di = x+1, di+4 {
+				copy(drow[di:di+4], srow[xoff[x]:xoff[x]+4])
+			}
+		}
+		return out
+	}
+
+	// Generic fallback for any other image type.
+	for y := 0; y < h; y++ {
+		sy := b.Min.Y + y*sh/h
+		for x := 0; x < w; x++ {
+			out.Set(x, y, src.At(b.Min.X+x*sw/w, sy))
 		}
 	}
 	return out
