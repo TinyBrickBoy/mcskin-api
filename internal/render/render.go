@@ -32,7 +32,9 @@ func Head(skin image.Image, size int) ([]byte, error) {
 	over := crop(skin, headOverlay)
 	merged := image.NewNRGBA(base.Bounds())
 	draw.Draw(merged, merged.Bounds(), base, base.Bounds().Min, draw.Src)
-	draw.Draw(merged, merged.Bounds(), over, over.Bounds().Min, draw.Over)
+	if !fullyOpaque(over) {
+		draw.Draw(merged, merged.Bounds(), over, over.Bounds().Min, draw.Over)
+	}
 	return encode(scaleNearest(merged, size, size))
 }
 
@@ -48,7 +50,9 @@ func Body(skin image.Image, size int) ([]byte, error) {
 	// crop returns origin-based images, so build the head at (0,0) too.
 	head := image.NewNRGBA(image.Rect(0, 0, headFace.w, headFace.h))
 	draw.Draw(head, head.Bounds(), crop(skin, headFace), image.Point{}, draw.Src)
-	draw.Draw(head, head.Bounds(), crop(skin, headOverlay), image.Point{}, draw.Over)
+	if over := crop(skin, headOverlay); !fullyOpaque(over) {
+		draw.Draw(head, head.Bounds(), over, image.Point{}, draw.Over)
+	}
 
 	place(head, 4, 0)                  // head centered
 	place(crop(skin, bodyFront), 4, 8) // torso
@@ -93,9 +97,13 @@ func Pfp(skin image.Image, size int) ([]byte, error) {
 	blit(20, 21, 8, 8, 6, 12) // chest
 	blit(44, 20, 3, 7, 5, 13) // left arm side
 
-	// Top (overlay) layer.
-	blit(40, 9, 7, 7, 8, 4) // head overlay
-	blit(33, 9, 3, 7, 5, 4) // head side overlay
+	// Top (overlay) layer. Skip the head overlay when it is fully opaque: legacy
+	// skins often leave the hat region filled (commonly black), which would
+	// otherwise completely cover the face.
+	if !fullyOpaque(crop(skin, headOverlay)) {
+		blit(40, 9, 7, 7, 8, 4) // head overlay
+		blit(33, 9, 3, 7, 5, 4) // head side overlay
+	}
 	if !legacy {
 		blit(52, 52, 3, 7, 12, 13) // right arm side overlay
 		blit(52, 36, 3, 7, 5, 13)  // left arm side overlay
@@ -140,6 +148,22 @@ func crop(skin image.Image, r region) image.Image {
 		}
 	}
 	return out
+}
+
+// fullyOpaque reports whether every pixel of img has alpha 255. A fully opaque
+// head overlay is a legacy-skin artifact (the unused 2nd layer left filled,
+// often black) rather than a real hat, so callers skip compositing it to avoid
+// blacking out the face.
+func fullyOpaque(img image.Image) bool {
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a != 0xffff {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func scaleNearest(src image.Image, w, h int) image.Image {

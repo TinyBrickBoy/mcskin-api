@@ -92,6 +92,55 @@ func TestPfpLegacySkin(t *testing.T) {
 	}
 }
 
+// opaqueOverlaySkin builds a skin with a visible face and a FULLY OPAQUE head
+// overlay (hat) region, mimicking legacy skins like Notch's where the unused
+// 2nd layer is left filled (here black).
+func opaqueOverlaySkin() image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, 64, 64))
+	for y := headFace.y; y < headFace.y+headFace.h; y++ {
+		for x := headFace.x; x < headFace.x+headFace.w; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{R: 200, G: 160, B: 120, A: 255}) // skin tone
+		}
+	}
+	for y := headOverlay.y; y < headOverlay.y+headOverlay.h; y++ {
+		for x := headOverlay.x; x < headOverlay.x+headOverlay.w; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{R: 0, G: 0, B: 0, A: 255}) // opaque black hat
+		}
+	}
+	return img
+}
+
+// A fully opaque head overlay must be ignored so the face stays visible rather
+// than being blacked out.
+func TestOpaqueOverlayDoesNotBlackOutHead(t *testing.T) {
+	black := func(c color.Color) bool {
+		r, g, b, a := c.RGBA()
+		return r>>8 == 0 && g>>8 == 0 && b>>8 == 0 && a>>8 == 255
+	}
+	render := func(name string, b []byte, err error) image.Image {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return decode(t, b)
+	}
+
+	out, err := Head(opaqueOverlaySkin(), 8)
+	if head := render("Head", out, err); black(head.At(4, 4)) {
+		t.Fatal("Head: face blacked out by opaque overlay")
+	}
+
+	out, err = Body(opaqueOverlaySkin(), 16)
+	if body := render("Body", out, err); black(body.At(8, 4)) { // head at top-center
+		t.Fatal("Body: head blacked out by opaque overlay")
+	}
+
+	out, err = Pfp(opaqueOverlaySkin(), 20)
+	if pfp := render("Pfp", out, err); black(pfp.At(11, 7)) { // inside the bust's head
+		t.Fatal("Pfp: head blacked out by opaque overlay")
+	}
+}
+
 func TestSizeFloorIsOne(t *testing.T) {
 	out, err := Face(sampleSkin(), 0)
 	if err != nil {
