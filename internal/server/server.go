@@ -89,8 +89,7 @@ func (s *Server) handleSkin(w http.ResponseWriter, r *http.Request) {
 
 // handle3DPfp renders a stylized big-head 3D bust of the player's skin. Unlike
 // the flat renders it needs the slim flag for correct arm width, so it has its
-// own handler instead of going through handleImage. Camera angle is tunable via
-// ?elev= and ?azim= (degrees).
+// own handler instead of going through handleImage.
 func (s *Server) handle3DPfp(w http.ResponseWriter, r *http.Request) {
 	skin, err := s.mc.Skin(r.Context(), r.PathValue("player"))
 	if err != nil {
@@ -102,11 +101,7 @@ func (s *Server) handle3DPfp(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid skin texture", http.StatusBadGateway)
 		return
 	}
-	out, err := render.Tiny3D(img, parseSize(r), render.Tiny3DOptions{
-		Slim: skin.Slim,
-		Elev: parseFloat(r, "elev"),
-		Azim: parseFloat(r, "azim"),
-	})
+	out, err := render.Tiny3D(img, parseSize(r), skin.Slim)
 	if err != nil {
 		http.Error(w, "render failed", http.StatusInternalServerError)
 		return
@@ -132,7 +127,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			"GET /avatar/{player}?size=N",
 			"GET /body/{player}?size=N",
 			"GET /pfp/{player}?size=N",
-			"GET /3dpfp/{player}?size=N&elev=33&azim=-38",
+			"GET /3dpfp/{player}?size=N",
 			"GET /health",
 		},
 		"notes": "player = username or UUID; size 1-512 (default 128)",
@@ -150,20 +145,6 @@ func parseSize(r *http.Request) int {
 	}
 	if n > maxSize {
 		return maxSize
-	}
-	return n
-}
-
-// parseFloat reads an optional float query param, returning 0 (the renderer's
-// "use default" sentinel) when absent or unparseable.
-func parseFloat(r *http.Request, key string) float64 {
-	q := r.URL.Query().Get(key)
-	if q == "" {
-		return 0
-	}
-	n, err := strconv.ParseFloat(q, 64)
-	if err != nil {
-		return 0
 	}
 	return n
 }

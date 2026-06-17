@@ -142,7 +142,7 @@ func TestOpaqueOverlayDoesNotBlackOutHead(t *testing.T) {
 }
 
 func TestTiny3DDimensionsAndContent(t *testing.T) {
-	out, err := Tiny3D(sampleSkin(), 128, Tiny3DOptions{SS: 2})
+	out, err := Tiny3D(sampleSkin(), 128, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestTiny3DDimensionsAndContent(t *testing.T) {
 }
 
 func TestTiny3DSlimAndLegacy(t *testing.T) {
-	if _, err := Tiny3D(sampleSkin(), 96, Tiny3DOptions{Slim: true}); err != nil {
+	if _, err := Tiny3D(sampleSkin(), 96, true); err != nil {
 		t.Fatalf("slim: %v", err)
 	}
 	legacy := image.NewNRGBA(image.Rect(0, 0, 64, 32))
@@ -180,7 +180,7 @@ func TestTiny3DSlimAndLegacy(t *testing.T) {
 			legacy.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 4), G: uint8(y * 8), B: 64, A: 255})
 		}
 	}
-	if _, err := Tiny3D(legacy, 80, Tiny3DOptions{}); err != nil {
+	if _, err := Tiny3D(legacy, 80, false); err != nil {
 		t.Fatalf("legacy: %v", err)
 	}
 }

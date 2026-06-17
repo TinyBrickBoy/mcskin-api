@@ -14,7 +14,7 @@ Sie löst Minecraft-Benutzernamen oder UUIDs über die offiziellen Mojang-APIs a
 | `GET /avatar/{player}`      | Alias für `/head`                                   |
 | `GET /body/{player}`        | Flacher Ganzkörper-Render von vorne                 |
 | `GET /pfp/{player}`         | Stilisierter 20×20 Büsten-Avatar (Kopf + Schultern) |
-| `GET /3dpfp/{player}`       | 3D-Render mit großem Kopf (Software-Rasterizer)     |
+| `GET /3dpfp/{player}`       | 3D-Render mit großem Kopf (fester Winkel)           |
 | `GET /health`               | Healthcheck (`{"status":"ok"}`)                     |
 | `GET /`                     | API-Übersicht als JSON                              |
 
@@ -23,7 +23,7 @@ Sie löst Minecraft-Benutzernamen oder UUIDs über die offiziellen Mojang-APIs a
 - Spieler ohne eigenen Skin bekommen einen deterministischen Fallback-Skin (kein Fehler).
 - `/3dpfp` rendert ein „Big-Head"-3D-Modell mit einem reinen Software-Rasterizer (Z-Buffer,
   Supersampling, perspektivische Projektion) — ohne GPU und ohne externe Dependencies. Der
-  Kamerawinkel ist über `?elev=` (Höhe) und `?azim=` (Drehung) in Grad einstellbar.
+  Kamerawinkel ist fest, damit alle Avatare gleich aussehen; nur `?size=` ist einstellbar.
 
 ### Beispiele
 
@@ -32,7 +32,7 @@ curl localhost:8080/face/Notch?size=256 -o notch.png
 curl localhost:8080/head/jeb_         -o jeb.png
 curl localhost:8080/body/Notch        -o notch_body.png
 curl localhost:8080/pfp/Notch?size=200 -o notch_pfp.png
-curl "localhost:8080/3dpfp/Notch?size=400&azim=-38&elev=33" -o notch_3dpfp.png
+curl localhost:8080/3dpfp/Notch?size=400 -o notch_3dpfp.png
 curl localhost:8080/skin/069a79f4-44e9-4726-a5be-fca90e38aaf5 -o skin.png
 ```
 

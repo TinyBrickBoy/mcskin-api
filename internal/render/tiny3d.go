@@ -10,18 +10,20 @@ import (
 	"math"
 )
 
-// Tiny3DOptions tunes the 3D render. Zero values fall back to sensible defaults.
-type Tiny3DOptions struct {
-	Slim bool    // slim (Alex) 3px-arm model
-	Elev float64 // camera height above the horizon, in degrees (default 33)
-	Azim float64 // camera rotation around the figure, in degrees (default -38)
-	Fov  float64 // vertical field of view, in degrees (default 32)
-	SS   int     // supersampling factor 1..4 (default 3)
-}
+// Fixed camera and quality settings for the 3D render. These are intentionally
+// not configurable: every avatar is rendered from the same angle so results are
+// consistent across players.
+const (
+	camElev  = 33  // camera height above the horizon, in degrees
+	camAzim  = -38 // camera rotation around the figure, in degrees
+	camFov   = 32  // vertical field of view, in degrees
+	ssFactor = 3   // supersampling factor for anti-aliasing
+)
 
 // Tiny3D renders skin as a stylized big-head 3D bust, size×size pixels, on a
-// transparent background.
-func Tiny3D(skin image.Image, size int, opt Tiny3DOptions) ([]byte, error) {
+// transparent background, from a fixed camera angle. slim selects the 3px-arm
+// (Alex) model.
+func Tiny3D(skin image.Image, size int, slim bool) ([]byte, error) {
 	out := size
 	if out < 64 {
 		out = 64
@@ -29,24 +31,15 @@ func Tiny3D(skin image.Image, size int, opt Tiny3DOptions) ([]byte, error) {
 	if out > 2048 {
 		out = 2048
 	}
-	ss := opt.SS
-	if ss == 0 {
-		ss = 3
-	}
-	if ss < 1 {
-		ss = 1
-	}
-	if ss > 4 {
-		ss = 4
-	}
+	ss := ssFactor
 	w, h := out*ss, out*ss
 
-	elev := deg(orDefault(opt.Elev, 33))
-	azim := deg(orDefault(opt.Azim, -38))
-	fov := deg(orDefault(opt.Fov, 32))
+	elev := deg(camElev)
+	azim := deg(camAzim)
+	fov := deg(camFov)
 
 	tex := newTexture(skin)
-	parts := buildParts(opt.Slim)
+	parts := buildParts(slim)
 
 	dist := (radius / math.Sin(fov/2)) * 1.05
 	eye := vec3{
@@ -127,13 +120,6 @@ func Tiny3D(skin image.Image, size int, opt Tiny3DOptions) ([]byte, error) {
 		}
 	}
 	return encode(img)
-}
-
-func orDefault(v, def float64) float64 {
-	if v == 0 {
-		return def
-	}
-	return v
 }
 
 func deg(d float64) float64 { return d * math.Pi / 180 }
