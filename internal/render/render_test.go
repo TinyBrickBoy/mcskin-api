@@ -141,6 +141,50 @@ func TestOpaqueOverlayDoesNotBlackOutHead(t *testing.T) {
 	}
 }
 
+func TestTiny3DDimensionsAndContent(t *testing.T) {
+	out, err := Tiny3D(sampleSkin(), 128, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := decode(t, out)
+	b := img.Bounds()
+	if b.Dx() != 128 || b.Dy() != 128 {
+		t.Fatalf("got %v, want 128x128", b)
+	}
+	// Background corner must stay transparent.
+	if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
+		t.Fatalf("background not transparent: alpha=%d", a)
+	}
+	// The figure must actually be drawn somewhere (some opaque pixel).
+	opaque := false
+	for y := 0; y < 128 && !opaque; y += 4 {
+		for x := 0; x < 128; x += 4 {
+			if _, _, _, a := img.At(x, y).RGBA(); a == 0xffff {
+				opaque = true
+				break
+			}
+		}
+	}
+	if !opaque {
+		t.Fatal("rendered figure is fully transparent")
+	}
+}
+
+func TestTiny3DSlimAndLegacy(t *testing.T) {
+	if _, err := Tiny3D(sampleSkin(), 96, true); err != nil {
+		t.Fatalf("slim: %v", err)
+	}
+	legacy := image.NewNRGBA(image.Rect(0, 0, 64, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 64; x++ {
+			legacy.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 4), G: uint8(y * 8), B: 64, A: 255})
+		}
+	}
+	if _, err := Tiny3D(legacy, 80, false); err != nil {
+		t.Fatalf("legacy: %v", err)
+	}
+}
+
 func TestSizeFloorIsOne(t *testing.T) {
 	out, err := Face(sampleSkin(), 0)
 	if err != nil {
